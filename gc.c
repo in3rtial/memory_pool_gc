@@ -6,49 +6,73 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <string.h>
-#pragma pack(1)
+#include <stdlib.h>
+
 
 #define HEAPSIZE 33554432
 
 
-// Based on the fixed pool memory allocator by Eli Bendersky
-// http://eli.thegreenplace.net/2008/10/17/
-//memmgr-a-fixed-pool-memory-allocator/
+/* Based on the fixed pool memory allocator by Eli Bendersky
+ * http://eli.thegreenplace.net/2008/10/17/
+ * memmgr-a-fixed-pool-memory-allocator */
 
-//TYPE DECLARATIONS
-typedef unsigned char byte;
+/*TYPE DECLARATIONS*/
+typedef char byte;
+typedef unsigned int position;
 
-//GLOBAL HEAP
+
+/*GLOBAL HEAP*/
 static byte pool[HEAPSIZE]; 
 
-//FORWARD FUNCTION DECLARATIONS
+/*GLOBAL INDEX OF FREE POSITION*/
+static position freep = 0;
+
+/*FORWARD FUNCTION DECLARATIONS*/
 void memMove(byte array[],
              unsigned int init, 
              unsigned int final,
              unsigned int size);
 
 
-//PAGE SYSTEM----------------------------------------------------------------
-/* This is the page system. 
+/*PAGE SYSTEM----------------------------------------------------------------
+ * This is the page system. 
  * Its a simple linked list. 
  * It has globally accessible first element and uses NULL as sentinel.
  * 
+ * Each page has a last byte (the right) which is allocated to
+ * represent the mark bit (byte in our case). If it isn't marked, the
+ * page is destroyed and the next slides left on the last known free position.
+ *
+ * Operations complexity (only the ones used in here) 
+ * ADD -> O(1), we keep a pointer to the last page
+ * DEFRAG -> O(n), this is a combination of walking through the list and
+ * moving the memory left with memMove (which allows overlay of structures).
  * 
+ * DEFRAG is called only in the special case that the memory left on the right
+ * is too small to accomodate the next structure.
  */
+
 struct page 
 {
     unsigned int left;
-    unsigned int right; //could be recalculated
+    unsigned int right;
     unsigned int size;
     struct page* next;
 };
+typedef struct page page;
 
-//SHIFT PAGE IN MEMORY
-void shiftPage(unsigned int newLeftPosition, 
-                   struct page* PAGE, byte pool[])
+
+page ANCHOR = {0, 0, 0, NULL};
+page* FIRSTPAGE = &ANCHOR;
+page* LASTPAGE =  &ANCHOR;
+
+
+/*SHIFT PAGE LEFT IN MEMORY*/
+void MV(unsigned int newLeftPosition, 
+               page* PAGE, byte pool[])
 {
-    //only shift left
-    assert (newLeftPosition <= (PAGE->left));
+    /*only shift left, since we defrag*/
+    assert (newLeftPosition < (PAGE->left));
     
     unsigned int oldPosition = (PAGE->left);
     int offset = (PAGE->left) - newLeftPosition;
@@ -58,12 +82,94 @@ void shiftPage(unsigned int newLeftPosition,
     memMove(pool, oldPosition, newLeftPosition,(PAGE->size));
     
 }
-void newPage(size_t size){
+
+/*GET FREE AVAILABLE MEMORY
+ * meaningful only after defrag, otherwise
+ * dead objects are conserved 
+ */
+unsigned int AVAILABLEMEM()
+{
+    return(HEAPSIZE - freep);
 }
 
 
-//MEMORY FUNCTIONS-----------------------------------------------------------
-//MEMCPY FOR BYTE ARRAY
+void printPage(page* p)
+{
+    printf("               size             %u\n", (p->size));
+    printf(" PAGE          left position    %u\n", (p->left));
+    printf("               right position   %u\n", (p->right));
+    if((p->next)==NULL) 
+    {
+        printf("               TERMINAL\n");
+    }
+    printf("\n");
+}
+
+void printAllPages()
+{
+    page* tmp = FIRSTPAGE;
+    int i = 1;
+    while(i==1)
+    {
+        printPage(tmp);
+        if((tmp->next) != NULL)
+        {
+            tmp = (tmp->next);
+        }
+        else
+        {
+            i=0;
+        }
+    }
+}
+/*ADD PAGE TO PAGE SYSTEM
+ * by definition, it is added at the end, so it becomes the lastpage
+ */
+void addPage(unsigned int size)
+{
+    
+    /* allocate a new page */
+    page* newPage = (page*) malloc(sizeof(page));
+    
+    /* the location will be at the end of the system 
+       and we allocate +1 for the markbyte */
+    (newPage->left) = freep;
+    (newPage->right) = (freep+size+1);
+    (newPage->size) = (size+1);
+    (newPage->next) = NULL;
+    
+    /* update the LASTPAGE */
+    (LASTPAGE->next) = newPage;
+    LASTPAGE = newPage;
+    freep = (newPage->right)+1;
+    
+    
+}
+
+/*DEFRAG*/
+/* to see if the byte is marked we introduce symbols 
+ * that are located at the last byte of the structure.
+ * They are reached through pointer arithmetic by
+ * the page system and the marking system...
+ * 'U' -> unmarked
+ * 'M' -> marked
+ */
+void defrag()
+{
+    
+}
+
+
+
+void newPage(size_t size)
+{
+    
+}
+
+
+/*MEMORY FUNCTIONS-----------------------------------------------------------*/
+
+ /*MEMCPY FOR BYTE ARRAY*/
 void memMove(byte array[],       //array to manipulate
              unsigned int init,  //initial position
              unsigned int final, //final position
@@ -85,7 +191,7 @@ void memMove(byte array[],       //array to manipulate
     }
 }
 
-//MEMSET FOR BYTE ARRAY
+/*MEMSET FOR BYTE ARRAY*/
 void memSet(byte array[],
             byte value,
             unsigned int position,
@@ -101,9 +207,7 @@ void memSet(byte array[],
 
 
 
-//------------------------------------------------------------------
-
-
+/*------------------------------------------------------------------*/
 
 struct GCroot ROOTS = {NULL, NULL};
 
@@ -116,8 +220,27 @@ struct GCobject *gc_malloc (struct GCclass *c)
       utiliser le dernier byte du champ `class' comme "markbit".  */
    assert (!((size_t)c & 1));
    
-   //avoid running for nothing
-   assert ((size_t)c < HEAPSIZE);
+   /* Get the memory size */
+   int memSize = (c->size);
+   
+   if(HEAPSIZE<memSize)
+   {
+        printf("NO MEM LEFT, IMMINENT SEGFAULT :)\n");
+        return NULL;
+   }
+   
+   /* on first pass, if there isn't enough mem, we defrag */
+   if (AVAILABLEMEM() < memSize)
+   {
+       defrag();
+   }
+   /* if there still isn't enough memory, we allocate fuckall */
+   if (AVAILABLEMEM()< memSize)
+   {
+       printf("NO MEM LEFT, IMMINENT SEGFAULT :)\n");
+       return NULL;
+   }
+   
    
    
 }
@@ -125,40 +248,48 @@ struct GCobject *gc_malloc (struct GCclass *c)
 
 
 
+/* --------------------------BEGIN-STATS------------------------------------ */
 
-
-//RETURNS STATUS OF MEM SYSTEM
+/*RETURNS STATUS OF MEM SYSTEM*/
 struct GCstats gc_stats (void)
 {
-    //Get the global permanent root
-    struct GCroot *tmp = &ROOTS;
-    
-    //We only want count and used memory
-    int count = 0;
-    int used = 0;
-    
-    //Iterate through the linked list
-    while((tmp->next) != NULL)
+    /* We proceed through the pages */
+    int count = -1;
+    int usedSize = 0;
+    page* tmp = FIRSTPAGE;
+    int i = 1;
+    while(i==1)
     {
-        ++count;
-        struct GCobject *pointee = *(tmp->ptr);
-        if(pointee != NULL){
-        used +=  pointee->class->size;}
-        tmp = (tmp->next);
+        count++;
+        usedSize += (tmp->size);
+        if((tmp->next)==NULL)
+        {
+            i=0;
+        }
+        else
+        {
+            tmp = (tmp->next);
+        }
     }
     
-   //Assign the int values 
-   struct GCstats g = {count, used, ((32 * 1024 * 1024) - used)};
-   return (g);
+    struct GCstats r = {count, usedSize, ((HEAPSIZE) - usedSize)}; 
+    return r;
 }
 
-//PRINTS THE MEMORY STATUS
-void printStats(struct GCstats stats)
+/*PRETTY PRINT MEMORY STATUS*/
+void printStats()
 {
-    printf("LIVING OBJECTS : %d\n", stats.count);
-    printf("USED MEMORY SPACE : %d\n", stats.used);
-    printf("UNUSED MEMORY SPACE : %d\n", stats.free);
+    struct GCstats stats = gc_stats();
+    printf("\n");
+    /* 15 char spacing */
+    printf("               objects       %d\n", stats.count);
+    printf("HEAP STATUS    used memory   %d\n", stats.used);
+    printf("               unused memory %d\n", stats.free);
+    printf("\n");
+    
 }
+/* ----------------------------END-STATS------------------------------------ */
+
 
 
 
@@ -189,8 +320,7 @@ int *intMalloc(char array[], int position)
 }
     
     
-//gc_protect va simplement ajouter 
-//le root a l'indice 1 du 
+
 void gc_protect (struct GCroot *r)
 {
    assert (r->next == NULL); /* Pour notre usage, pas celui du mutateur!  */
@@ -223,7 +353,7 @@ struct ListInt {
 
 void main(void)
 {
- 
+ /*
     byte x[100];
     
     
@@ -249,27 +379,23 @@ void main(void)
     printf("%d\n", *s);
     
     
-//     memSet(x, 0, 
+ 
     printf("%d\n", *p);
     printf("%d\n", *q);
     printf("%d\n", *r);
     
     printf("char = %lu\n", sizeof(char));
-    printf("int = %lu\n", sizeof(int));
-    printf("int = %lu\n", sizeof(struct ListInt));
+    printf("int = %lu\n", (size_t) int);
+    */
+   
+    addPage(250);
+    addPage(1000);
+    printStats();
+    printAllPages();
     
-    
-    /*
-    int *f = x[0];
-   // *f += 1;
-    *f ++;
-    printf("%d\n", *f);
-    *f ++;
-    printf("%d\n", *f);
-    *f ++;
-    printf("%d\n", *f);
-  */
 
+    byte a = '\1';
+    printf("%c \n", a);
 
     
     
