@@ -6,8 +6,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <string.h>
-#include <stdlib.h>
-
+#pragma pack(1)
 
 #define HEAPSIZE 33554432
 
@@ -18,7 +17,6 @@
 
 /*TYPE DECLARATIONS*/
 typedef char byte;
-typedef unsigned int position;
 
 
 /*GLOBAL HEAP*/
@@ -62,12 +60,11 @@ struct page
 typedef struct page page;
 
 
-page ANCHOR = {0, 0, 0, NULL};
-page* FIRSTPAGE = &ANCHOR;
-page* LASTPAGE =  &ANCHOR;
+page FIRSTPAGE = {0, 0, 0, NULL};
+page LASTPAGE = FIRSTPAGE;
 
 
-/*SHIFT PAGE LEFT IN MEMORY*/
+/*SHIFT PAGE IN MEMORY*/
 void MV(unsigned int newLeftPosition, 
                page* PAGE, byte pool[])
 {
@@ -82,84 +79,24 @@ void MV(unsigned int newLeftPosition,
     memMove(pool, oldPosition, newLeftPosition,(PAGE->size));
     
 }
-
-/*GET FREE AVAILABLE MEMORY
- * meaningful only after defrag, otherwise
- * dead objects are conserved 
- */
+/*GET FREE MEMORY*/
 unsigned int AVAILABLEMEM()
 {
     return(HEAPSIZE - freep);
 }
 
 
-void printPage(page* p)
-{
-    printf("               size             %u\n", (p->size));
-    printf(" PAGE          left position    %u\n", (p->left));
-    printf("               right position   %u\n", (p->right));
-    if((p->next)==NULL) 
-    {
-        printf("               TERMINAL\n");
-    }
-    printf("\n");
-}
-
-void printAllPages()
-{
-    page* tmp = FIRSTPAGE;
-    int i = 1;
-    while(i==1)
-    {
-        printPage(tmp);
-        if((tmp->next) != NULL)
-        {
-            tmp = (tmp->next);
-        }
-        else
-        {
-            i=0;
-        }
-    }
-}
-/*ADD PAGE TO PAGE SYSTEM
- * by definition, it is added at the end, so it becomes the lastpage
- */
+/*ADD PAGE TO PAGE SYSTEM*/
 void addPage(unsigned int size)
 {
-    
-    /* allocate a new page */
-    page* newPage = (page*) malloc(sizeof(page));
-    
-    /* the location will be at the end of the system 
-       and we allocate +1 for the markbyte */
-    (newPage->left) = freep;
-    (newPage->right) = (freep+size+1);
-    (newPage->size) = (size+1);
-    (newPage->next) = NULL;
-    
-    /* update the LASTPAGE */
-    (LASTPAGE->next) = newPage;
-    LASTPAGE = newPage;
-    freep = (newPage->right)+1;
-    
     
 }
 
 /*DEFRAG*/
-/* to see if the byte is marked we introduce symbols 
- * that are located at the last byte of the structure.
- * They are reached through pointer arithmetic by
- * the page system and the marking system...
- * 'U' -> unmarked
- * 'M' -> marked
- */
 void defrag()
 {
     
 }
-
-
 
 void newPage(size_t size)
 {
@@ -219,28 +156,7 @@ struct GCobject *gc_malloc (struct GCclass *c)
    /* On présume que `c' est aligné sur un multiple de 2, pour pouvoir
       utiliser le dernier byte du champ `class' comme "markbit".  */
    assert (!((size_t)c & 1));
-   
-   /* Get the memory size */
-   int memSize = (c->size);
-   
-   if(HEAPSIZE<memSize)
-   {
-        printf("NO MEM LEFT, IMMINENT SEGFAULT :)\n");
-        return NULL;
-   }
-   
-   /* on first pass, if there isn't enough mem, we defrag */
-   if (AVAILABLEMEM() < memSize)
-   {
-       defrag();
-   }
-   /* if there still isn't enough memory, we allocate fuckall */
-   if (AVAILABLEMEM()< memSize)
-   {
-       printf("NO MEM LEFT, IMMINENT SEGFAULT :)\n");
-       return NULL;
-   }
-   
+   assert ((size_t)c < HEAPSIZE);
    
    
 }
@@ -248,48 +164,40 @@ struct GCobject *gc_malloc (struct GCclass *c)
 
 
 
-/* --------------------------BEGIN-STATS------------------------------------ */
+
 
 /*RETURNS STATUS OF MEM SYSTEM*/
 struct GCstats gc_stats (void)
 {
-    /* We proceed through the pages */
-    int count = -1;
-    int usedSize = 0;
-    page* tmp = FIRSTPAGE;
-    int i = 1;
-    while(i==1)
+    /*Get the global permanent root*/
+    struct GCroot *tmp = &ROOTS;
+    
+    /*We only want count and used memory*/
+    int count = 0;
+    int used = 0;
+    
+    /*Iterate through the linked list*/
+    while((tmp->next) != NULL)
     {
-        count++;
-        usedSize += (tmp->size);
-        if((tmp->next)==NULL)
-        {
-            i=0;
-        }
-        else
-        {
-            tmp = (tmp->next);
-        }
+        ++count;
+        struct GCobject *pointee = *(tmp->ptr);
+        if(pointee != NULL){
+        used +=  pointee->class->size;}
+        tmp = (tmp->next);
     }
     
-    struct GCstats r = {count, usedSize, ((HEAPSIZE) - usedSize)}; 
-    return r;
+   /*Assign the int values*/
+   struct GCstats g = {count, used, ((32 * 1024 * 1024) - used)};
+   return (g);
 }
 
-/*PRETTY PRINT MEMORY STATUS*/
-void printStats()
+/*PRINTS THE MEMORY STATUS*/
+void printStats(struct GCstats stats)
 {
-    struct GCstats stats = gc_stats();
-    printf("\n");
-    /* 15 char spacing */
-    printf("               objects       %d\n", stats.count);
-    printf("HEAP STATUS    used memory   %d\n", stats.used);
-    printf("               unused memory %d\n", stats.free);
-    printf("\n");
-    
+    printf("LIVING OBJECTS : %d\n", stats.count);
+    printf("USED MEMORY SPACE : %d\n", stats.used);
+    printf("UNUSED MEMORY SPACE : %d\n", stats.free);
 }
-/* ----------------------------END-STATS------------------------------------ */
-
 
 
 
@@ -388,14 +296,21 @@ void main(void)
     printf("int = %lu\n", (size_t) int);
     */
    
-    addPage(250);
-    addPage(1000);
-    printStats();
-    printAllPages();
     
+    
+    
+    printf("%d\n", 2);
+    /*
+    int *f = x[0];
+   // *f += 1;
+    *f ++;
+    printf("%d\n", *f);
+    *f ++;
+    printf("%d\n", *f);
+    *f ++;
+    printf("%d\n", *f);
+  */
 
-    byte a = '\1';
-    printf("%c \n", a);
 
     
     
