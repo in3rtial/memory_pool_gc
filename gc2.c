@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
+#pragma pack(1)
 
 #define HEAPSIZE 33554432
 
@@ -305,14 +306,6 @@ void printAllPages()
 
 
     
-    
-    
-
-
-
-
-
-
 struct GCobject** gc_malloc (struct GCclass *c)
 {  
    /* Get the memory size */
@@ -378,8 +371,8 @@ void printStats()
     struct GCstats stats = gc_stats();
     printf("\n");
     /* 15 char spacing */
-    printf("               objects          %d\n", stats.count);
-    printf("HEAP STATUS    used memory      %d\n", stats.used);
+    printf("HEAP STATUS    objects          %d\n", stats.count);
+    printf("               used memory      %d\n", stats.used);
     printf("               available memory %d\n", stats.free);
     printf("\n");
     
@@ -395,34 +388,25 @@ void printStats()
 /* -----------------------BEGIN-MARKING-FUNCTIONS---------------------------- */
 
 
-void gc_mark (struct GCobject *o)
+void gc_mark (struct GCobject* o)
 {
     /* careful about arithmetic here... */
     int size = (o->class->size);
-    size++;
+    printf("size of struct is %d\n", size);
     
     size_t size2 = size;
-    byte* b = (byte*) o;
+    byte* b = (byte*) (o);
     b+=size2;
     *b = 'M';
 }
 
+
 /*
-struct GCobject {
-   struct GCclass *class;
-};
-
-struct GCclass {
-   int size;
-   void (*mark) (struct GCobject *o);
-};
-*/
-
 int *intMalloc(char array[], int position)
 {
     return (int*) &array[position];
 }
-    
+*/  
     
 
 void gc_protect (struct GCroot *r)
@@ -474,16 +458,10 @@ int garbage_collect (void)
 }
 
 
-/*
-struct ListInt {
-   struct GCclass *class;
-   int n;
-   struct ListInt *next;
-};
-*/
 
 
-void test1(void)
+
+void testPages(void)
 {
     printf("\n------------------------------------------------------------------\n");
     addPage(250);
@@ -509,13 +487,49 @@ void test1(void)
     printf("\n------------------------------------------------------------------\n");
 }
 
+/* Objects declarations */
+struct ListInt {
+   struct GCclass *class;
+   int n;
+   
+   
+};
 
+
+void mark_ListInt (struct GCobject *o)
+{
+   //gc_mark((*o));
+}
+
+
+struct GCclass class_ListInt = { sizeof (struct ListInt), &mark_ListInt };
+
+
+
+void testObjects(void)
+{
+    
+    printf("\n==================================================================\n");
+    struct ListInt** g = (struct ListInt**) gc_malloc(&class_ListInt);
+    struct ListInt** g3 = (struct ListInt**) gc_malloc(&class_ListInt);
+    printAllPages();
+    printStats();
+    //printf("%lu\n", sizeof(struct ListInt));
+    struct ListInt* g2 = (*g);
+    printf("class size = %d\n", (*(&class_ListInt)).size);
+    (g2->n) = 24;
+    (g2->n) = 25;
+    printf("n value is %d\n", (g2->n));
+    //printf("%d\n", (g2->class->size));
+}
 
 
 
 void main(void)
 {
-    test1();
+    testPages();
+    testObjects();
+
    
  
 }
