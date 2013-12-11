@@ -25,7 +25,7 @@ struct GCclass {
 };
 
 /* Allocation d'un nouvel objet de la classe `c'.  */
-struct GCobject *gc_malloc (struct GCclass *c);
+struct GCobject **gc_malloc (struct GCclass *c);
 
 /* Fonction de marquage du GC.
    Cette fonction marque tous les objets accessibles depuis `o'.  */

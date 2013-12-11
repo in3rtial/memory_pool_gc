@@ -21,6 +21,11 @@ static byte pool[HEAPSIZE];
 /*GLOBAL INDEX OF FREE POSITION*/
 unsigned int freep = 0;
 
+/*GLOBAL ROOT */
+struct GCroot rootAnchor = {NULL, NULL};
+struct GCroot* FIRSTROOT = &rootAnchor;
+struct GCroot* LASTROOT = &rootAnchor;
+
 /*FORWARD FUNCTION DECLARATIONS*/
 void memMove(byte array[],
              unsigned int init, 
@@ -71,6 +76,7 @@ void memMove(byte array[],
  * mid level
  *      -MV(newLeft, PAGE, pool[]): slides the page on the leftmost available spot
  * 
+ * 
  * low level
  *      -memMove(newLeft, OldLeft, Size): exactly like memmove but on byte array
  *      -memSet(Left, Size, Char) : exactly like memset but on byte array
@@ -120,14 +126,6 @@ unsigned int AVAILABLEMEM()
 }
 
 
-
-/*-----------------------------------END-PAGE-SYSTEM-----------------------------------*/
-
-
-
-
-
-
 /*ADD PAGE TO PAGE SYSTEM
  * by definition, it is added at the end, so it becomes the lastpage
  */
@@ -153,9 +151,6 @@ struct GCobject** addPage(unsigned int size)
     pool[(newPage->left) + (newPage->size)] = 'U';
     return &(newPage->obj);
 }
-
-
-
     
 /*DEFRAG*/
 /* to see if the byte is marked we introduce symbols 
@@ -211,13 +206,11 @@ void defrag()
             free(tmp);
             tmp = tmp_next;
         }
-
         
         if(tmp ==NULL)
         {
             finished = 1;
         }
-        
     }
     
     /* reassign LASTPAGE to the last */
@@ -232,11 +225,6 @@ void defrag()
     
 }
 
-
-
-
-
-/*MEMORY FUNCTIONS-----------------------------------------------------------*/
 
  /*MEMCPY FOR BYTE ARRAY*/
 void memMove(byte array[],       //array to manipulate
@@ -273,6 +261,8 @@ void memSet(byte array[],
     }
 }
     
+
+/*-----------------------------------END-PAGE-SYSTEM-----------------------------------*/
 
 
 
@@ -317,17 +307,8 @@ void printAllPages()
     
     
     
-    
-    
-    
-    
-    
-    
-    
-    
-/*------------------------------------------------------------------*/
 
-struct GCroot ROOTS = {NULL, NULL};
+
 
 
 
@@ -408,24 +389,11 @@ void printStats()
 
 
 
-static bool marked (struct GCobject *o)
-{
-    /* So we know that the pointer is inside an array of bytes */
 
-    if((byte) ((size_t)o->class+1) == 'M')
-    {
-        return true;
-    }
-    else if((byte) ((size_t)o->class+1) == 'U')
-    {
-        return false;
-    }
-    else
-    {
-        printf("Bug with pointer arithmetic on mark byte. Returned false.\n");
-        return false;
-    }
-}
+
+
+/* -----------------------BEGIN-MARKING-FUNCTIONS---------------------------- */
+
 
 void gc_mark (struct GCobject *o)
 {
@@ -453,17 +421,42 @@ int *intMalloc(char array[], int position)
 void gc_protect (struct GCroot *r)
 {
    assert (r->next == NULL); /* Pour notre usage, pas celui du mutateur!  */
-  
+   (LASTROOT->next) = r;
+   LASTROOT = r;
 }
 
 void gc_unprotect (struct GCroot *r)
 {
-   /* ¡!¡ À REMPLIR !¡! */
+    /* undefined if many roots pointing to the same... we go O(n) until we meet the equal */
+    struct GCroot* tmp_before = FIRSTROOT;
+    /* tmp cannot be null... */
+    struct GCroot* tmp = (FIRSTROOT->next);
+    int adequate = 1;
+    while(adequate)
+    {
+        if(tmp == NULL)
+        {
+            adequate = 0;
+        }
+        else if(tmp == r)
+        {
+            adequate = 0;
+            /* get next */
+            tmp = (tmp->next);
+            /*  */
+            (tmp_before->next) = tmp;
+        }
+        else
+        {
+            tmp_before = tmp;
+            tmp = (tmp->next);
+        }
+    }
 }
 
 int garbage_collect (void)
 {
-   /* ¡!¡ À REMPLIR !¡! */
+   defrag();
 }
 
 

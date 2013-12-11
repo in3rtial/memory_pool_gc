@@ -26,10 +26,7 @@ static byte pool[HEAPSIZE];
 static position freep = 0;
 
 /*FORWARD FUNCTION DECLARATIONS*/
-void memMove(byte array[],
-             unsigned int init, 
-             unsigned int final,
-             unsigned int size);
+
 
 
 /*PAGE SYSTEM----------------------------------------------------------------
@@ -37,24 +34,16 @@ void memMove(byte array[],
  * Its a simple linked list. 
  * It has globally accessible first element and uses NULL as sentinel.
  * 
- * Each page has a last byte (the right) which is allocated to
- * represent the mark bit (byte in our case). If it isn't marked, the
- * page is destroyed and the next slides left on the last known free position.
- *
- * Operations complexity (only the ones used in here) 
- * ADD -> O(1), we keep a pointer to the last page
- * DEFRAG -> O(n), this is a combination of walking through the list and
- * moving the memory left with memMove (which allows overlay of structures).
- * 
- * DEFRAG is called only in the special case that the memory left on the right
- * is too small to accomodate the next structure.
+ * All blocks have originally the same size
  */
 
 struct page 
 {
+    bool free;
     unsigned int left;
     unsigned int right;
     unsigned int size;
+    struct page* before;
     struct page* next;
 };
 typedef struct page page;
