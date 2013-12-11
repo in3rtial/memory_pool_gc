@@ -34,22 +34,24 @@ void memMove(byte array[],
              unsigned int size);
 
 
-/*-------------------------------BEGIN-PAGE-SYSTEM----------------------------------
+/*--------------------------BEGIN-PAGE-SYSTEM-----------------------------
  * DESCRIPTION
  * 
  * This is the page system. It's somewhat a virtual memory system.
  * 
  * It has a linked list of pages, all ordered by allocation (we always
- * allocate at the end, O(1) since we keep a reference to the last page in memory).
+ * allocate at the end, O(1) since we keep a reference to the last page
+ * in memory).
  * 
  * It has globally accessible first element and uses NULL as sentinel.
  * 
  * Each page has a last byte (the right) which is allocated to
  * represent the mark bit (byte in our case). Since a mark byte is added, 
- * we don't really give a damn about the size and don't require it to be a multiple of 2...
+ * we don't really give a damn about the size and don't require it to be a
+ * multiple of 2...
  * 
  * If during garbage collection, the last byte of the page isn't marked, the
- * page is destroyed and the next slides left on the last known free position.
+ * page is destroyed and the next slides left on last known free position.
  *
  * 
  * Operations complexity (only the ones used in here) 
@@ -57,30 +59,32 @@ void memMove(byte array[],
  * DEFRAG -> O(n), this is a combination of walking through the list and
  * moving the memory left with memMove (which allows overlay of structures).
  * 
- * DEFRAG is called only in the special case that the memory left on the right
+ * DEFRAG is called  in the special case that the memory left on the right
  * is too small to accomodate the next structure.
  * 
- * Although this system doesn't have suitable alignment, from a practical standpoint
- * it has the advantage of no fragmentation (we can fill the block completely and 
- * it is guaranteed to provide almost as much space as advertised (we add 1 mark byte
- * per object, so the more objects, the more marks...).
+ * Although this system doesn't have suitable alignment, from a 
+ * practical standpoint it has the advantage of no fragmentation (we can 
+ * fill the block completely and it is guaranteed to provide almost as much 
+ * space as advertised (we add 1 mark byte per object, so the more objects, 
+ * the more marks...).
  * 
- * This system will be inefficient when a large quantity of small objects are used
- * because we keep unique page for each object.
+ * This system will be inefficient when a large quantity of small objects 
+ * are used because we keep unique page for each object.
  * 
  * COMPOSITION
  * The system is composed of the following functions:
  * high level
  *      -addPage(size): adds new memory location
- *      -defrag(): goes through the pages and, delete unmarked ones, and does the defragmentation.
+ *      -defrag(): goes through the pages and, delete unmarked ones, 
+ *          and does the defragmentation.
  * 
  * mid level
- *      -MV(newLeft, PAGE, pool[]): slides the page on the leftmost available spot
+ *      -MV(newLeft, PAGE, pool[]): slides page on leftmost available spot
  * 
  * 
  * low level
- *      -memMove(newLeft, OldLeft, Size): exactly like memmove but on byte array
- *      -memSet(Left, Size, Char) : exactly like memset but on byte array
+ *      -memMove(newLeft, OldLeft, Size): like memmove but on byte array
+ *      -memSet(Left, Size, Char) : like memset but on byte array
  */
 
 struct page 
@@ -263,11 +267,11 @@ void memSet(byte array[],
 }
     
 
-/*-----------------------------------END-PAGE-SYSTEM-----------------------------------*/
+/*-----------------------------END-PAGE-SYSTEM----------------------------*/
 
 
 
-/* --------------------------BEGIN-PRINT-FUNCTIONS------------------------------------ */
+/* -----------------------BEGIN-PRINT-FUNCTIONS---------------------------*/
 /* PRINT A SINGLE MEMORY PAGE */
 void printPage(page* p)
 {
@@ -302,7 +306,7 @@ void printAllPages()
     }
 }
 
-/* -----------------------------END-PRINT-FUNCTIONS------------------------------------ */
+/* ----------------------END-PRINT-FUNCTIONS------------------------------ */
 
 
     
@@ -337,7 +341,7 @@ struct GCobject** gc_malloc (struct GCclass *c)
 
 
 
-/* --------------------------BEGIN-STATS------------------------------------ */
+/* --------------------------BEGIN-STATS---------------------------------- */
 
 /*RETURNS STATUS OF MEM SYSTEM*/
 struct GCstats gc_stats (void)
@@ -377,7 +381,7 @@ void printStats()
     printf("\n");
     
 }
-/* ----------------------------END-STATS------------------------------------ */
+/* ----------------------------END-STATS---------------------------------- */
 
 
 
@@ -385,7 +389,7 @@ void printStats()
 
 
 
-/* -----------------------BEGIN-MARKING-FUNCTIONS---------------------------- */
+/* -----------------------BEGIN-MARKING-FUNCTIONS------------------------- */
 
 
 void gc_mark (struct GCobject* o)
@@ -418,7 +422,8 @@ void gc_protect (struct GCroot *r)
 
 void gc_unprotect (struct GCroot *r)
 {
-    /* undefined if many roots pointing to the same... we go O(n) until we meet the equal */
+    /* undefined if many roots pointing to the same... we go O(n) 
+     * until we meet the equal */
     struct GCroot* tmp_before = FIRSTROOT;
     /* tmp cannot be null... */
     struct GCroot* tmp = (FIRSTROOT->next);
@@ -463,28 +468,30 @@ int garbage_collect (void)
 
 void testPages(void)
 {
-    printf("\n------------------------------------------------------------------\n");
+    printf("\n----------------------------------------------------------\n");
     addPage(250);
     addPage(1000);
 //     pool[251] = 'M';
     printStats();
     printAllPages();
     
-    printf("\n------------------------------------------------------------------\n");
+    printf("\n----------------------------------------------------------\n");
     defrag();
     printAllPages();
     
-    printf("\n------------------------------------------------------------------\n");
+    printf("\n----------------------------------------------------------\n");
     printPage(LASTPAGE);
     addPage(499999);
     addPage(4999999);
     
-    printf("\n------------------------------------------------------------------\n");
+    printf("\n----------------------------------------------------------\n");
     printAllPages();
-    printf("\n------------------------------------------------------------------\n");
+    printf("\n----------------------------------------------------------\n");
     printStats();
     printf("free position is now %d\n", freep);
-    printf("\n------------------------------------------------------------------\n");
+    defrag();
+    printAllPages();
+    printf("\n----------------------------------------------------------\n");
 }
 
 /* Objects declarations */
@@ -509,7 +516,7 @@ struct GCclass class_ListInt = { sizeof (struct ListInt), &mark_ListInt };
 void testObjects(void)
 {
     
-    printf("\n==================================================================\n");
+    printf("\n==========================================================\n");
     struct ListInt** g = (struct ListInt**) gc_malloc(&class_ListInt);
     struct ListInt** g3 = (struct ListInt**) gc_malloc(&class_ListInt);
     printAllPages();
@@ -521,6 +528,7 @@ void testObjects(void)
     (g2->n) = 25;
     printf("n value is %d\n", (g2->n));
     //printf("%d\n", (g2->class->size));
+    printf("\n==========================================================\n");
 }
 
 
