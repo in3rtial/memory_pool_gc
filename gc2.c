@@ -397,7 +397,14 @@ void printStats()
 
 void gc_mark (struct GCobject *o)
 {
-   /* ¡!¡ À REMPLIR !¡! */
+    /* careful about arithmetic here... */
+    int size = (o->class->size);
+    size++;
+    
+    size_t size2 = size;
+    byte* b = (byte*) o;
+    b+=size2;
+    *b = 'M';
 }
 
 /*
@@ -457,19 +464,28 @@ void gc_unprotect (struct GCroot *r)
 int garbage_collect (void)
 {
    defrag();
+   int i = 0;
+   struct GCroot* tmp = FIRSTROOT;
+   while(tmp != NULL)
+   {
+       gc_mark((*(tmp->ptr)));
+       tmp = tmp->next;
+   }
 }
 
 
-
-
+/*
 struct ListInt {
    struct GCclass *class;
    int n;
    struct ListInt *next;
 };
+*/
+
 
 void test1(void)
 {
+    printf("\n------------------------------------------------------------------\n");
     addPage(250);
     addPage(1000);
 //     pool[251] = 'M';
@@ -490,6 +506,7 @@ void test1(void)
     printf("\n------------------------------------------------------------------\n");
     printStats();
     printf("free position is now %d\n", freep);
+    printf("\n------------------------------------------------------------------\n");
 }
 
 
