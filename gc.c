@@ -513,6 +513,11 @@ struct ListInt {
    
 };
 
+void mark_ListInt(struct GCobject **o)
+{
+    
+}
+
 struct GCclass class_ListInt = { sizeof (struct ListInt), NULL };
 
 struct ListInt** cons (int car, struct ListInt **cdr)
