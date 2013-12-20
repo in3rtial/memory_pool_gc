@@ -140,8 +140,9 @@ unsigned int AVAILABLEMEM()
 /*ADD PAGE TO PAGE SYSTEM
  * by definition, it is added at the end, so it becomes the lastpage
  */
-struct GCobject** addPage(unsigned int size)
+struct GCobject** addPage(struct GCclass* class)
 {
+    int size = (class->size);
     
     /* allocate a new page */
     page* newPage = (page*) malloc(sizeof(page));
@@ -153,7 +154,7 @@ struct GCobject** addPage(unsigned int size)
     (newPage->size) = (size+1);
     (newPage->next) = NULL;
     (newPage->obj) = (struct GCobject*) &pool[freep];
-    
+    (newPage->obj->class) = class;
     /*(int*) &array[position];*/
     /* update the LASTPAGE */
     (LASTPAGE->next) = newPage;
@@ -341,7 +342,7 @@ struct GCobject** gc_malloc (struct GCclass *c)
    
    /* if it gets there, we allocate */
    /* (int*) &array[position]; */
-   return addPage(memSize);
+   return addPage(c);
 }
 
 
@@ -400,29 +401,26 @@ void printStats()
 
 void gc_mark (struct GCobject* o)
 {
-    /* careful about arithmetic here... */
+    /* get the size of the class */
     int size = (o->class->size);
-//     printf("size of struct is %d\n", size);
-//     printf("pointer location = %p\n", &(*o));
+    /* cast to size_t, would also protect against negative integers */
     size_t size2 = size;
+    /* reach the pointee + 1 byte */
     byte* b = (byte*) (o);
     b+=size2;
     b++;
+    /* mark the byte */
     (*b) = 'M';
 }
 
 
-/*
-int *intMalloc(char array[], int position)
-{
-    return (int*) &array[position];
-}
-*/  
+
     
 
 void gc_protect (struct GCroot *r)
 {
-   assert (r->next == NULL); /* Pour notre usage, pas celui du mutateur!  */
+    /* we can always add at the end because its next is NULL*/
+   assert (r->next == NULL);
    (LASTROOT->next) = r;
    LASTROOT = r;
 }
@@ -439,23 +437,28 @@ void gc_unprotect (struct GCroot *r)
     {
         if(tmp == NULL)
         {
+            /* arrived at the end */
             adequate = 0;
         }
         else if(tmp == r)
         {
+            /* get the root out of the root system */
             adequate = 0;
             /* get next */
             tmp = (tmp->next);
-            /*  */
+            /* assign next to before */
             (tmp_before->next) = tmp;
+
         }
         else
         {
+            /* still not there */
             tmp_before = tmp;
             tmp = (tmp->next);
         }
     }
 }
+
 
 int garbage_collect (void)
 {
@@ -469,36 +472,34 @@ int garbage_collect (void)
    }
 }
 
-
-
-
-
-void testPages(void)
+struct GCclass testStruct1 = {250, NULL};
+struct GCclass testStruct2 = {1000, NULL};
+int testPages(void)
 {
-    printf("\n----------------------------------------------------------\n");
-    addPage(250);
-    addPage(1000);
-//     pool[251] = 'M';
-    printStats();
-    printAllPages();
+    int testPassed = 1;
+
+    addPage(&testStruct1);
+    addPage(&testStruct2);
+
+    pool[251] = 'M';
+    struct GCstats g = gc_stats();
     
-    printf("\n----------------------------------------------------------\n");
+    if(g.count != 2)
+    {
+        testPassed = 0;
+    }
+    
     defrag();
-    printAllPages();
     
-    printf("\n----------------------------------------------------------\n");
-    printPage(LASTPAGE);
-    addPage(499999);
-    addPage(4999999);
+    g = gc_stats();
+    if(g.count != 1)
+    {
+        testPassed = 0;
+    }
     
-    printf("\n----------------------------------------------------------\n");
-    printAllPages();
-    printf("\n----------------------------------------------------------\n");
-    printStats();
-    printf("free position is now %d\n", freep);
     defrag();
-    printAllPages();
-    printf("\n----------------------------------------------------------\n");
+    
+    return testPassed;
 }
 
 
@@ -508,56 +509,19 @@ void testPages(void)
 struct ListInt {
    struct GCclass *class;
    int n;
-   //struct ListInt ** next;
+   struct ListInt ** next;
    
 };
 
 struct GCclass class_ListInt = { sizeof (struct ListInt), NULL };
 
-/* Mark the whole list of integers
- * Since we only call this from the root and the root
- * is allocated on the stack, we don't need to mark it,
- * only the successors */
-/*
-void mark_ListIntRest(struct ListInt **l);
-
-void mark_ListIntRoot(struct ListInt *l)
-{   
-    //mark the next
-    mark_ListIntRest((l->next));
-}
-
-void mark_ListIntRest(struct ListInt *l)
+struct ListInt** cons (int car, struct ListInt **cdr)
 {
-    //reverse cast it to GCobject
-    struct GCobject *g = (struct GCobject *)l;
-    gc_mark(g);
-    if((l->next) != NULL)
-    {
-        mark_ListIntRest((l->next));
-    }
-    
+    struct ListInt** l = (struct ListInt**) gc_malloc(&class_ListInt);
+    (*l)->n = car;
+    (*l)->next = cdr;
+    return l;
 }
-
-
-
-void testMark(void)
-{
-    struct ListInt *l1 = NULL, *l2 = NULL;
-    
-}*/
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 int test_valueAssign(void)
@@ -601,6 +565,7 @@ void printParameters(struct GCobject *o)
     
 }
 
+
 void printArray(int begin, int end)
 {
     if( begin >= 0 && end < HEAPSIZE)
@@ -612,6 +577,7 @@ void printArray(int begin, int end)
     }
 }
 
+
 int test_defragging(void)
 {
     int testPassed = 1;
@@ -621,17 +587,12 @@ int test_defragging(void)
     ((*g)->n)= 25;
     ((*g)->class) = (&class_ListInt);
     
+    /* check value */
     if(((*g)->n) != 25)
     {
         testPassed = 0;
     }
-   
     
-    struct GCobject* g2 = (struct GCobject *)(*g);
-    
-    /* printf("Size of g is %d, and has sizeof of %d\n",
-           (g2->class->size), (sizeof((*g2))));
-    */
     /* Mark the structure */
     gc_mark((struct GCobject*)(*g));
     
@@ -651,29 +612,47 @@ int test_defragging(void)
     {
         testPassed = 0;
     }
-    return testPassed;
     
+    return testPassed;
 }
 
 void main(void)
 { 
-    //testPages();
     
-    
-    // Assign a value to a field mallocated
+
     int goOn = 1;
-    if (test_valueAssign())
+    if(goOn == 1)
     {
-        printf("assign : ok\n");
-    }
-    else
-    {
-        goOn = 0;
-        printf("ASSIGN : PROBLEM\n");
+        /* test page system */
+        if(testPages())
+        {
+            printf("pages : ok\n");
+        }
+        else
+        {
+            goOn = 0;
+            printf("PAGES : PROBLEM\n");
+        }
     }
     
     if(goOn == 1)
     {
+        /* assignment test */
+        if (test_valueAssign())
+        {
+            printf("assign : ok\n");
+        }
+        else
+        {
+            goOn = 0;
+            printf("ASSIGN : PROBLEM\n");
+        }
+    }
+    
+    
+    if(goOn == 1)
+    {
+        /* defrag and mark test */
         if(test_defragging() == 1)
         {
             printf("defragging : ok\n");
@@ -683,6 +662,11 @@ void main(void)
             goOn = 0;
             printf("DEFRAGGING : PROBLEM\n");
         }
+        
+    }
+    
+    if(goOn == 1)
+    {
         
     }
 
