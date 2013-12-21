@@ -119,10 +119,10 @@ void MV(unsigned int newLeftPosition,
     
     unsigned int oldPosition = (PAGE->left);
     int offset = (PAGE->left) - newLeftPosition;
-    
+    printf("offset is : %d\n", offset); 
     (PAGE->left) = newLeftPosition;
     (PAGE->right) -= offset;
-    (PAGE->obj) -= offset;
+    (PAGE->obj) = (struct GCobject *) &pool[(PAGE->left)];
     memMove(pool, oldPosition, newLeftPosition,(PAGE->size));
     
 }
@@ -200,6 +200,7 @@ void defrag()
             pool[index] ='U';
             if(freep != (tmp->left))
             {
+                
                 MV(freep, tmp, pool);
             }
             freep = ((tmp->right)+1);
@@ -219,7 +220,7 @@ void defrag()
             tmp = tmp_next;
         }
         
-        if(tmp ==NULL)
+        if(tmp == NULL)
         {
             finished = 1;
         }
@@ -590,7 +591,7 @@ int test_defragging(void)
     
     /* try assigning  */
     ((*g)->n)= 25;
-    ((*g)->class) = (&class_ListInt);
+    //((*g)->class) = (&class_ListInt);
     
     /* check value */
     if(((*g)->n) != 25)
@@ -620,6 +621,46 @@ int test_defragging(void)
     
     return testPassed;
 }
+
+int testTranslation(void)
+{
+    int testPassed = 1;
+    
+    struct ListInt ** l1 = (struct ListInt**) gc_malloc(&class_ListInt);
+    struct ListInt ** l2 = (struct ListInt**) gc_malloc(&class_ListInt);
+    (*l1)->n = 100;
+    (*l2)->n = 42;
+    gc_mark((struct GCobject *)(*l2));
+    struct GCstats s = gc_stats();
+    
+    if(s.count != 2)
+    {
+        testPassed = 0;
+    }
+    printf("Initial L2 address : %p, V = %d\n", &((*l2)->n), ((*l2)->n));
+    
+
+    
+    defrag();
+    printf("Defrag L2 address : %p, V = %d\n", &((*l2)->n), ((*l2)->n));
+    
+    printAllPages();
+    printf("%d\n", (*l2)->n);
+    s = gc_stats();
+    
+    if(s.count != 1)
+    {
+        testPassed = 0;
+    }
+    if(((*l2)->n) != 42)
+    {
+        testPassed = 0;
+    }
+    
+    return testPassed;
+}
+
+
 
 void main(void)
 { 
@@ -658,7 +699,7 @@ void main(void)
     if(goOn == 1)
     {
         /* defrag and mark test */
-        if(test_defragging() == 1)
+        if(test_defragging())
         {
             printf("defragging : ok\n");
         }
@@ -672,7 +713,15 @@ void main(void)
     
     if(goOn == 1)
     {
-        
+        if(testTranslation())
+        {
+            printf("translation : ok\n");
+        }
+        else
+        {
+            goOn = 0;
+            printf("TRANSLATION : PROBLEM\n");
+        }
     }
 
 
