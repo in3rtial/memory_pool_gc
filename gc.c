@@ -119,7 +119,6 @@ void MV(unsigned int newLeftPosition,
     
     unsigned int oldPosition = (PAGE->left);
     int offset = (PAGE->left) - newLeftPosition;
-    printf("offset is : %d\n", offset); 
     (PAGE->left) = newLeftPosition;
     (PAGE->right) -= offset;
     (PAGE->obj) = (struct GCobject *) &pool[(PAGE->left)];
@@ -298,7 +297,7 @@ void printPage(page* p)
 /* PRINT ALL REACHABLE MEMORY PAGES */
 void printAllPages()
 {
-    page* tmp = FIRSTPAGE;
+    page* tmp = (FIRSTPAGE->next);
     int i = 1;
     while(i==1)
     {
@@ -416,15 +415,54 @@ void gc_mark (struct GCobject* o)
 
 
 
+int rootLen()
+{
+    int i = 0;
     
+    int adequate = 1;
+    struct GCroot* tmp = FIRSTROOT;
+    
+    while(adequate)
+    {
+        if((tmp->next) == NULL)
+        {
+            adequate = 0;
+        }
+        else
+        {
+            i += 1;
+            tmp = (tmp->next);
+        }
+    }
+    return i;
+}
 
 void gc_protect (struct GCroot *r)
 {
     /* we can always add at the end because its next is NULL*/
-   assert (r->next == NULL);
+   assert ((r->next) == NULL);
    (LASTROOT->next) = r;
    LASTROOT = r;
 }
+
+
+void gc_markMethod(struct GCobject ** pointed)
+{
+    (*((*pointed)->class->mark))(*pointed);
+}
+
+void gc_markAll(void)
+{
+    struct GCroot* tmp = FIRSTROOT;
+    int length = rootLen();
+    int i = 0;
+    for(i; i< length ; i++)
+    {
+        struct GCobject** pointed = (tmp->ptr);
+        (*((*pointed)->class->mark))(*pointed);
+    }
+}
+
 
 void gc_unprotect (struct GCroot *r)
 {
@@ -463,14 +501,9 @@ void gc_unprotect (struct GCroot *r)
 
 int garbage_collect (void)
 {
+
+   gc_markAll();
    defrag();
-   int i = 0;
-   struct GCroot* tmp = FIRSTROOT;
-   while(tmp != NULL)
-   {
-       gc_mark((*(tmp->ptr)));
-       tmp = (tmp->next);
-   }
 }
 
 struct GCclass testStruct1 = {250, NULL};
@@ -519,7 +552,7 @@ void mark_ListInt(struct GCobject **o)
     
 }
 
-struct GCclass class_ListInt = { sizeof (struct ListInt), NULL };
+struct GCclass class_ListInt = { sizeof (struct ListInt), &gc_mark };
 
 struct ListInt** cons (int car, struct ListInt **cdr)
 {
@@ -624,41 +657,101 @@ int test_defragging(void)
 
 int testTranslation(void)
 {
+    /* create 4 objects, mark 2nd and 4th, defrag and query the values */
     int testPassed = 1;
     
     struct ListInt ** l1 = (struct ListInt**) gc_malloc(&class_ListInt);
     struct ListInt ** l2 = (struct ListInt**) gc_malloc(&class_ListInt);
-    (*l1)->n = 100;
-    (*l2)->n = 42;
-    gc_mark((struct GCobject *)(*l2));
-    struct GCstats s = gc_stats();
+    struct ListInt ** l3 = (struct ListInt**) gc_malloc(&class_ListInt);
+    struct ListInt ** l4 = (struct ListInt**) gc_malloc(&class_ListInt);
     
+    (*l1)->n = 1;
+    (*l2)->n = 2;
+    (*l3)->n = 3;
+    (*l4)->n = 4;
+    
+    gc_mark((struct GCobject *)(*l2));
+    gc_mark((struct GCobject *)(*l4));
+    
+    //printAllPages();
+    defrag();
+    struct GCstats s = gc_stats();
     if(s.count != 2)
     {
         testPassed = 0;
     }
-    printf("Initial L2 address : %p, V = %d\n", &((*l2)->n), ((*l2)->n));
     
 
+    if(((*l2)->n) != 2)
+    {
+        testPassed = 0;
+    }
+    if(((*l4)->n) != 4)
+    {
+        testPassed = 0;
+    }
+    
+    //printAllPages();
+    defrag();
+    return testPassed;
+}
+
+
+
+
+int testRootMark(void)
+{
+    int testPassed = 1;
+    defrag();
+    struct ListInt** a = (struct ListInt**) gc_malloc(&class_ListInt);
+    struct ListInt** b = (struct ListInt**) gc_malloc(&class_ListInt);
+    (*a)->n = 42;
+    
+    gc_markMethod((struct GCobject**) (a));
     
     defrag();
-    printf("Defrag L2 address : %p, V = %d\n", &((*l2)->n), ((*l2)->n));
     
-    printAllPages();
-    printf("%d\n", (*l2)->n);
-    s = gc_stats();
-    
-    if(s.count != 1)
+    if(gc_stats().count != 1)
     {
         testPassed = 0;
     }
-    if(((*l2)->n) != 42)
+    if(((*a)->n) != 42)
     {
         testPassed = 0;
     }
+    defrag();
+    return testPassed;
+    
+}
+
+
+
+
+
+
+
+
+
+int testRoot(void)
+{
+    int testPassed = 1;
+    
+    struct ListInt** a = (struct ListInt**) gc_malloc(&class_ListInt);
+    struct ListInt** b = (struct ListInt**) gc_malloc(&class_ListInt);
+    
+    struct GCroot root = {(struct GCobject**) a, NULL};
+    gc_protect(&root);
+    
+//     garbage_collect();
+//     if(gc_stats().count != 1)
+//     {
+//         testPassed = 0;
+//     }
     
     return testPassed;
 }
+
+
 
 
 
@@ -667,9 +760,9 @@ void main(void)
     
 
     int goOn = 1;
-    if(goOn == 1)
+    if(goOn)
     {
-        /* test page system */
+        /* page system test */
         if(testPages())
         {
             printf("pages : ok\n");
@@ -681,9 +774,9 @@ void main(void)
         }
     }
     
-    if(goOn == 1)
+    if(goOn)
     {
-        /* assignment test */
+        /* assignment of values test */
         if (test_valueAssign())
         {
             printf("assign : ok\n");
@@ -696,7 +789,7 @@ void main(void)
     }
     
     
-    if(goOn == 1)
+    if(goOn)
     {
         /* defrag and mark test */
         if(test_defragging())
@@ -711,8 +804,9 @@ void main(void)
         
     }
     
-    if(goOn == 1)
+    if(goOn)
     {
+        /* object translation in memory pool test */
         if(testTranslation())
         {
             printf("translation : ok\n");
@@ -722,6 +816,27 @@ void main(void)
             goOn = 0;
             printf("TRANSLATION : PROBLEM\n");
         }
+    }
+    
+    if(goOn)
+    {
+        /* root marking system test */
+        if(testRootMark())
+        {
+            printf("root mark : ok\n");
+        }
+        else
+        {
+            goOn = 0;
+            printf("ROOT MARK : PROBLEM\n");
+        }
+    }
+    
+    
+    if(goOn)
+    {
+        /* root protection testing */
+        
     }
 
 
