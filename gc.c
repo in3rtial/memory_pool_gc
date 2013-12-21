@@ -121,7 +121,7 @@ void MV(unsigned int newLeftPosition,
     int offset = (PAGE->left) - newLeftPosition;
     (PAGE->left) = newLeftPosition;
     (PAGE->right) -= offset;
-    (PAGE->obj) = (struct GCobject *) &pool[(PAGE->left)];
+    (PAGE->obj) = (struct GCobject *) &(pool[(PAGE->left)]);
     memMove(pool, oldPosition, newLeftPosition,(PAGE->size));
     
 }
@@ -441,6 +441,7 @@ void gc_protect (struct GCroot *r)
 {
     /* we can always add at the end because its next is NULL*/
    assert ((r->next) == NULL);
+   assert ((r->ptr) != NULL);
    (LASTROOT->next) = r;
    LASTROOT = r;
 }
@@ -454,15 +455,18 @@ void gc_markMethod(struct GCobject ** pointed)
 
 void gc_markAll(void)
 {
-    struct GCroot* tmp = FIRSTROOT;
+    struct GCroot* tmp;
     int length = rootLen();
     int i = 0;
     if(length>0)
     {    
+        tmp = (FIRSTROOT->next);
         for(i; i< length ; i++)
         {
             struct GCobject** pointed = (tmp->ptr);
-            gc_markMethod(pointed);
+            assert(pointed != NULL);
+            gc_markMethod((struct GCobject**) pointed);
+            tmp = (tmp->next);
         }
     }
 }
@@ -722,20 +726,32 @@ int testRootMark(void)
     /* declare nodes on pool memory */
     struct ListInt** a = (struct ListInt**) gc_malloc(&class_ListInt2);
     struct ListInt** b = (struct ListInt**) gc_malloc(&class_ListInt2);
-    (*a)->n = 42;
-    (*b)->n = 7;
+    struct ListInt** d = (struct ListInt**) gc_malloc(&class_ListInt2);
+    struct ListInt** c = (struct ListInt**) gc_malloc(&class_ListInt2);
+    
+    (*a)->n = 1;
+    (*b)->n = 2;
+    (*c)->n = 3;
+    (*d)->n = 42;
     (*a)->next = b;
+    (*b)->next = c;
     
     /* declare root on stack */
     struct ListInt l1 =  {&class_ListInt2, 1000, a};
     
-    printf("root length = %d\n", rootLen());
-    
+    /* create a double pointer to l1 */
+    struct ListInt * l1_ptr = &l1; 
+    struct ListInt ** l1_2ptr = &l1_ptr;
     
     /* add the root */
-    GC_ROOT(root, l1);
+    struct GCroot root = { (struct GCobject **) l1_2ptr, NULL };
     gc_protect(&root);
-    printAllPages();
+    
+    
+    
+    
+    printf("Pointed address by root to l1 = %p\n", *(root.ptr));
+    
     if( (*(a)) != (*(l1.next)))
     {
         printf("Error on addresses in l1\n");
@@ -748,18 +764,24 @@ int testRootMark(void)
         testPassed = 0;
     }
     
-    gc_markMethod((struct GCobject **) a);
     
     
     
-    printf("root length = %d\n", rootLen());
+    //gc_markMethod((struct GCobject **) l1_2ptr);
+    gc_markAll();
+    printAllPages();
+    
+   
     defrag();
+    //printAllPages();
     
-    if(gc_stats().count != 1)
+    
+   
+    if(((*a)->n) != 1)
     {
         testPassed = 0;
     }
-    if(((*a)->n) != 42)
+    if(((*c)->n) != 3)
     {
         testPassed = 0;
     }
@@ -772,13 +794,7 @@ int testRootMark(void)
 
 
 
-int testLinkedMark(void)
-{
-    int testPassed = 1;
-    struct ListInt** a = (struct ListInt**) gc_malloc(&class_ListInt2);
-    struct ListInt** b = (struct ListInt**) gc_malloc(&class_ListInt2);
-    (*a)->next = b;
-}
+
 
 
 
