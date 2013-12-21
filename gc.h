@@ -21,7 +21,7 @@ struct GCclass {
    /* Méthode de marquage des objets de cette classe.
       Appelée par le GC, elle doit appeler `gc_mark' sur chacun des pointeurs
       qui apparaissent dans l'objet `o'.  */
-   void (*mark) (struct GCobject *o);
+   void (*mark) (struct GCobject **o);
 };
 
 /* Allocation d'un nouvel objet de la classe `c'.  */

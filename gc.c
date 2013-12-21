@@ -331,9 +331,9 @@ struct GCobject** gc_malloc (struct GCclass *c)
    /* on first pass, if there isn't enough mem, we defrag */
    if (AVAILABLEMEM() < memSize)
    {
-       defrag();
+       garbage_collect();
    }
-   /* if there still isn't enough memory, we allocate fuckall */
+   /* if there still isn't enough memory, we allocate nothing */
    if (AVAILABLEMEM()< memSize)
    {
        printf("NO MEM LEFT, IMMINENT SEGFAULT :)\n");
@@ -448,18 +448,22 @@ void gc_protect (struct GCroot *r)
 
 void gc_markMethod(struct GCobject ** pointed)
 {
-    (*((*pointed)->class->mark))(*pointed);
+    (*((*pointed)->class->mark))(pointed);
 }
+
 
 void gc_markAll(void)
 {
     struct GCroot* tmp = FIRSTROOT;
     int length = rootLen();
     int i = 0;
-    for(i; i< length ; i++)
-    {
-        struct GCobject** pointed = (tmp->ptr);
-        (*((*pointed)->class->mark))(*pointed);
+    if(length>0)
+    {    
+        for(i; i< length ; i++)
+        {
+            struct GCobject** pointed = (tmp->ptr);
+            gc_markMethod(pointed);
+        }
     }
 }
 
@@ -549,10 +553,23 @@ struct ListInt {
 
 void mark_ListInt(struct GCobject **o)
 {
+    /* recursive marking for ListInt
+     * the marking function must only be called from the root, which
+     * is allocated on the stack, not through gc_malloc, otherwise BOOM
+     * We only mark the next object.
+     */
+    struct ListInt ** l = (struct ListInt**) o;
     
+    if(((*l)->next) != NULL)
+    {
+        gc_mark((struct GCobject *) (*((*l)->next)));
+        mark_ListInt((struct GCobject**) (*l)->next);
+    }
 }
 
-struct GCclass class_ListInt = { sizeof (struct ListInt), &gc_mark };
+struct GCclass class_ListInt = { sizeof (struct ListInt), NULL };
+
+struct GCclass class_ListInt2 = {sizeof (struct ListInt), &mark_ListInt};
 
 struct ListInt** cons (int car, struct ListInt **cdr)
 {
@@ -598,15 +615,11 @@ int test_valueAssign(void)
 
 }
 
-void printParameters(struct GCobject *o)
-{
-    printf("size = %d\n", (o->class->size));
-    
-}
 
 
 void printArray(int begin, int end)
 {
+    /* low level byte array printing function */
     if( begin >= 0 && end < HEAPSIZE)
     {
         for( begin; begin < end; begin ++)
@@ -701,14 +714,45 @@ int testTranslation(void)
 
 int testRootMark(void)
 {
+    /* mark through the root system */
     int testPassed = 1;
     defrag();
-    struct ListInt** a = (struct ListInt**) gc_malloc(&class_ListInt);
-    struct ListInt** b = (struct ListInt**) gc_malloc(&class_ListInt);
+    
+    
+    /* declare nodes on pool memory */
+    struct ListInt** a = (struct ListInt**) gc_malloc(&class_ListInt2);
+    struct ListInt** b = (struct ListInt**) gc_malloc(&class_ListInt2);
     (*a)->n = 42;
+    (*b)->n = 7;
+    (*a)->next = b;
     
-    gc_markMethod((struct GCobject**) (a));
+    /* declare root on stack */
+    struct ListInt l1 =  {&class_ListInt2, 1000, a};
     
+    printf("root length = %d\n", rootLen());
+    
+    
+    /* add the root */
+    GC_ROOT(root, l1);
+    gc_protect(&root);
+    printAllPages();
+    if( (*(a)) != (*(l1.next)))
+    {
+        printf("Error on addresses in l1\n");
+        testPassed = 0;
+    }
+    
+    if( (*(b)) != (*((*a)->next)))
+    {
+        printf("Error on pointing from a to b\n");
+        testPassed = 0;
+    }
+    
+    gc_markMethod((struct GCobject **) a);
+    
+    
+    
+    printf("root length = %d\n", rootLen());
     defrag();
     
     if(gc_stats().count != 1)
@@ -728,7 +772,13 @@ int testRootMark(void)
 
 
 
-
+int testLinkedMark(void)
+{
+    int testPassed = 1;
+    struct ListInt** a = (struct ListInt**) gc_malloc(&class_ListInt2);
+    struct ListInt** b = (struct ListInt**) gc_malloc(&class_ListInt2);
+    (*a)->next = b;
+}
 
 
 
