@@ -246,14 +246,14 @@ void memMove(byte array[],       //array to manipulate
 {
     byte buffer[size];
     int i = 0;
-    for(i; i<size; i++)
+    for(; i<size; i++)
     {
         int j = i+init;
         buffer[i] = array[j];
         //array[j]='\0';
     }
     i=0;
-    for(i; i<size; i++)
+    for(; i<size; i++)
     {
         int j = i+final;
         array[j] = buffer[i];
@@ -267,7 +267,7 @@ void memSet(byte array[],
             unsigned int size)
 {
     int i = 0;
-    for(i; i<size; i++)
+    for(; i<size; i++)
     {
         array[i+position] = value;
     }
@@ -461,7 +461,7 @@ void gc_markAll(void)
     if(length>0)
     {    
         tmp = (FIRSTROOT->next);
-        for(i; i< length ; i++)
+        for(; i< length ; i++)
         {
             struct GCobject** pointed = (tmp->ptr);
             assert(pointed != NULL);
@@ -509,9 +509,11 @@ void gc_unprotect (struct GCroot *r)
 
 int garbage_collect (void)
 {
-
+   int start = gc_stats().used;
    gc_markAll();
    defrag();
+   int end = gc_stats().used;
+   return (start - end);
 }
 
 struct GCclass testStruct1 = {250, NULL};
@@ -626,7 +628,7 @@ void printArray(int begin, int end)
     /* low level byte array printing function */
     if( begin >= 0 && end < HEAPSIZE)
     {
-        for( begin; begin < end; begin ++)
+        for( ; begin < end; begin ++)
         {
             printf("pool[%d] = %c\n",begin, pool[begin]);
         }
@@ -716,7 +718,7 @@ int testTranslation(void)
 
 
 
-int testRootMark(void)
+int testRoot(void)
 {
     /* mark through the root system */
     int testPassed = 1;
@@ -738,19 +740,25 @@ int testRootMark(void)
     
     /* declare root on stack */
     struct ListInt l1 =  {&class_ListInt2, 1000, a};
+    struct ListInt l2 = {&class_ListInt2, 1001, d};
     
     /* create a double pointer to l1 */
     struct ListInt * l1_ptr = &l1; 
     struct ListInt ** l1_2ptr = &l1_ptr;
     
+    struct ListInt* l2_ptr = &l2;
+    struct ListInt** l2_2ptr = &l2_ptr;
+    
     /* add the root */
     struct GCroot root = { (struct GCobject **) l1_2ptr, NULL };
+    struct GCroot root2 = { (struct GCobject **) l2_2ptr, NULL};
     gc_protect(&root);
+    gc_protect(&root2);
     
     
     
     
-    printf("Pointed address by root to l1 = %p\n", *(root.ptr));
+    
     
     if( (*(a)) != (*(l1.next)))
     {
@@ -765,15 +773,10 @@ int testRootMark(void)
     }
     
     
+    garbage_collect();
     
-    
-    //gc_markMethod((struct GCobject **) l1_2ptr);
-    gc_markAll();
-    printAllPages();
-    
-   
-    defrag();
     //printAllPages();
+
     
     
    
@@ -786,6 +789,15 @@ int testRootMark(void)
         testPassed = 0;
     }
     defrag();
+    
+    gc_unprotect(&root);
+    gc_unprotect(&root2);
+    
+    if(rootLen() != 0)
+    {
+        testPassed = 0;
+    }
+    
     return testPassed;
     
 }
@@ -795,33 +807,7 @@ int testRootMark(void)
 
 
 
-
-
-
-int testRoot(void)
-{
-    int testPassed = 1;
-    
-    struct ListInt** a = (struct ListInt**) gc_malloc(&class_ListInt);
-    struct ListInt** b = (struct ListInt**) gc_malloc(&class_ListInt);
-    
-    struct GCroot root = {(struct GCobject**) a, NULL};
-    gc_protect(&root);
-    
-//     garbage_collect();
-//     if(gc_stats().count != 1)
-//     {
-//         testPassed = 0;
-//     }
-    
-    return testPassed;
-}
-
-
-
-
-
-void main(void)
+int main(void)
 { 
     
 
@@ -886,24 +872,22 @@ void main(void)
     
     if(goOn)
     {
-        /* root marking system test */
-        if(testRootMark())
+        /* general root system test
+         *includes protect, unprotect, marking, garbage collection
+         */
+        if(testRoot())
         {
-            printf("root mark : ok\n");
+            printf("root functions : ok\n");
         }
         else
         {
             goOn = 0;
-            printf("ROOT MARK : PROBLEM\n");
+            printf("ROOT FUNCTIONS : PROBLEM\n");
         }
     }
     
     
-    if(goOn)
-    {
-        /* root protection testing */
-        
-    }
+   return goOn;
 
 
    
